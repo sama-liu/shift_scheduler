@@ -75,7 +75,7 @@ class ShiftScheduler:
         self.shift_t16 = "T16"
         self.shift_t25 = "T25"
         self.shift_t38 = "T38"
-        self.shift_off = "休息"
+        self.shift_off = " "
         
         self.all_shifts = [self.shift_night, self.shift_fc, self.shift_fc3,
                           self.shift_t16, self.shift_t25, self.shift_t38, self.shift_off]
