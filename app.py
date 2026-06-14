@@ -62,11 +62,11 @@ class ShiftScheduler:
         self.previous_schedule = previous_schedule
         
         # 特殊人员索引（使用人员名称）
-        self.unable_night_person = person_names[24]  # 第25人
-        self.only_t25_t16_persons = [person_names[21], person_names[22], person_names[23]]
-        self.only_fc3_person = person_names[27]
-        self.parttime_fc_only = person_names[25]
-        self.parttime_flexible = person_names[26]
+        self.unable_night_person = person_names[23]  
+        self.only_t25_t16_persons = [person_names[20], person_names[21], person_names[22]]
+        self.only_fc3_person = person_names[26]
+        self.parttime_fc_only = person_names[24]
+        self.parttime_flexible = person_names[25]
         
         # 班次定义
         self.shift_night = "N"
