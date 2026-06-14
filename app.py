@@ -39,7 +39,7 @@ def save_default_names():
     if 'person_names' not in st.session_state:
         # 默认人员名称（可以改成你的真实人员）
         default_names = []
-        for i in range(25):
+        for i in range(26):
             default_names.append(f"员工{i+1}")
         for i in range(2):
             default_names.append(f"兼职{i+1}")
@@ -396,14 +396,15 @@ st.markdown("---")
 if 'person_names' not in st.session_state:
     # 在这里修改成你的人员名单！
     st.session_state.person_names = [
-        "张三", "李四", "王五", "赵六", "钱七",  # 人员1-5
-        "孙八", "周九", "吴十", "郑十一", "王十二",  # 人员6-10
-        "冯十三", "陈十四", "褚十五", "卫十六", "蒋十七",  # 人员11-15
-        "沈十八", "韩十九", "杨二十", "朱二十一", "秦二十二",  # 人员16-20
-        "尤二十三", "许二十四", "何二十五",  # 人员21-23（只T25/T16）
-        "吕禁夜",  # 人员24（不能上夜班）
-        "施兼职A",  # 人员25（兼职，只上FC）
-        "张兼职B"   # 人员26（兼职，全能）
+        "Flora Feng", "Ivy Chen", "Yolanda Yu", "Vivian You", "Eddie Yang",  # 人员1-5
+        "Yulia Tang", "Lusi Cai", "Peter Li", "Donnie Wu", "Sam Jiang",  # 人员6-10
+        "England Chen", "Zac Yang", "Riky Ye", "Celine Li", "Hope He",  # 人员11-15
+        "Sama Liu", "Yuki Jiang", "Jessica Dong", "Erin Li", "Riley Ren",  # 人员16-20
+        "Catherine Yeung", "Frankie Wong", "Cecilia Szeto",  # 人员21-23（只T25/T16）
+        "Joyce Luk",  # 人员24（不能上夜班）
+        "Jane Wang",  # 人员25（兼职，只上FC）
+        "Edward Liu",   # 人员26（兼职，全能）
+        "Clara Fong" # 人员27 (只上FC3)
     ]
 
 # 显示人员编辑界面
