@@ -1,6 +1,3 @@
-# 强制重置（仅在需要时使用）
-st.session_state.clear()
-
 # app.py - 自动排班系统
 import streamlit as st
 import pandas as pd
