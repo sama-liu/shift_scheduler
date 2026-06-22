@@ -495,8 +495,8 @@ st.markdown("---")
 # 参数设置
 st.sidebar.header("⚙️ 排班参数")
 
-min_hours = st.sidebar.number_input("📈 全职最低工时（小时/月）", min_value=160, max_value=175, value=167, step=1)
-target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=160, max_value=180, value=170, step=1)
+min_hours = st.sidebar.number_input("📈 全职最低工时（小时/月）", min_value=155, max_value=175, value=167, step=1)
+target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=155, max_value=180, value=170, step=1)
 max_hours = st.sidebar.number_input("⚠️ 最大工时（小时/月）", min_value=170, max_value=200, value=180, step=1)
 night_rest_days = st.sidebar.slider("🌙 N后强制休息天数", min_value=1, max_value=5, value=3, step=1)
 
@@ -609,7 +609,7 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
         else:
             st.error("❌ 未找到可行解")
-            st.info("💡 建议：\n1. 降低全职最低工时要求（从167降到165或160）\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
+            st.info("💡 建议：\n1. 降低全职最低工时要求（从155降到150）\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
 
 st.markdown("---")
 st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥167小时")
