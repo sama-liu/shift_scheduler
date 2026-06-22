@@ -468,9 +468,8 @@ with st.expander("👥 人员配置", expanded=True):
 
     with col2:
         st.write("**兼职 (2人)**")
-        st.write(f"  26. {st.session_state.person_names[24]} (Jane Wang, 只FC/周末休)")
-        st.write(f"  27. {st.session_state.person_names[25]} (Edward Liu, 全能)")
-        st.write(f"  28. {st.session_state.person_names[26]} (Clara Fong, 只FC3)")
+        st.write(f"  25. {st.session_state.person_names[24]} (Jane Wang, 只FC/周末休)")
+        st.write(f"  24. {st.session_state.person_names[25]} (Edward Liu, 全能)")
 
 st.markdown("---")
 
