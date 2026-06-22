@@ -37,19 +37,13 @@ PERSON_NAMES = [
 st.session_state.person_names = PERSON_NAMES
 
 # ==================== 索引配置 ====================
-# 全职人员索引：0-22（23人）
 FULLTIME_INDICES = list(range(23))
-
-# 兼职人员索引：23-24（2人）
 PARTTIME_INDICES = [23, 24]
+ONLY_T25_T16_INDICES = [19, 20, 21]
+ONLY_FC3_INDEX = 22
+PARTTIME_FC_ONLY_INDEX = 23
+PARTTIME_FLEXIBLE_INDEX = 24
 
-# 特殊人员索引
-ONLY_T25_T16_INDICES = [19, 20, 21]  # Catherine Yeung, Frankie Wong, Cecilia Szeto
-ONLY_FC3_INDEX = 22                   # Clara Fong
-PARTTIME_FC_ONLY_INDEX = 23           # Jane Wang
-PARTTIME_FLEXIBLE_INDEX = 24          # Edward Liu
-
-# 总人数
 TOTAL_PEOPLE = len(PERSON_NAMES)
 NUM_FULLTIME = 23
 NUM_PARTTIME = 2
@@ -404,7 +398,7 @@ class ShiftScheduler:
                 tag = "全职"
 
             if p in FULLTIME_INDICES:
-                status_tag = "✅" if total_h >= self.min_hours else f"⚠️({total_h}h)"
+                status_tag = "达标" if total_h >= self.min_hours else f"不足({total_h}h)"
             else:
                 status_tag = ""
 
@@ -569,10 +563,11 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
             with col2:
                 st.metric("全职平均工时", f"{fulltime_stats['总工时'].mean():.1f}h")
             with col3:
-               达标数 = len(fulltime_stats[fulltime_stats['总工时'] >= min_hours])
-                st.metric(f"全职工时≥{min_hours}h", f"{达标数}/{len(fulltime_stats)}")
+                passed_count = len(fulltime_stats[fulltime_stats['总工时'] >= min_hours])
+                st.metric(f"全职工时≥{min_hours}h", f"{passed_count}/{len(fulltime_stats)}")
             with col4:
-                st.metric("兼职平均工时", f"{parttime_stats['总工时'].mean():.1f}h" if len(parttime_stats) > 0 else "0h")
+                avg_parttime = parttime_stats['总工时'].mean() if len(parttime_stats) > 0 else 0
+                st.metric("兼职平均工时", f"{avg_parttime:.1f}h")
             with col5:
                 st.metric("平均夜班", f"{fulltime_stats['N'].mean():.1f}天")
 
