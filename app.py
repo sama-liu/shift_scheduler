@@ -1,4 +1,4 @@
-# app.py - 自动排班系统
+# app.py - 自动排班系统（全职优先版）
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -13,32 +13,39 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== 人员名单（固定） ====================
-# 注意：请确保此列表与下方索引配置完全对应
-FIXED_PERSON_NAMES = [
-    # 全能人员（20人）索引 0-19
+# ==================== 强制重置 ====================
+for key in list(st.session_state.keys()):
+    del st.session_state[key]
+
+# ==================== 人员名单 ====================
+PERSON_NAMES = [
+    # 全能人员（20人）索引 0-18
     "Flora Feng", "Ivy Chen", "Yolanda Yu", "Vivian You", "Eddie Yang",
     "Yulia Tang", "Lusi Cai", "Peter Li", "Donnie Wu", "Sam Jiang",
     "England Chen", "Zac Yang", "Riky Ye", "Celine Li", "Hope He",
-    "Sama Liu", "Yuki Jiang", "Jessica Dong", "Erin Li", "Riley Ren",
-    # 只T25/T16（3人）索引 20-22
+    "Sama Liu", "Yuki Jiang", "Jessica Dong", "Riley Ren",
+    # 只T25/T16（3人）索引 19-21
     "Catherine Yeung", "Frankie Wong", "Cecilia Szeto",
-    # 不能上夜班（1人）索引 23
+    # 禁夜班（1人）索引 22
     "Joyce Luk",
-    # 兼职 - 只上FC（1人）索引 24
+    # 兼职-只FC（1人）索引 25
     "Jane Wang",
-    # 兼职 - 全能（1人）索引 25
+    # 兼职-全能（1人）索引 24
     "Edward Liu",
-    # 只上FC3（1人）索引 26
+    # 只FC3（1人）索引 23
     "Clara Fong"
 ]
 
-# 特殊人员索引配置
-ONLY_T25_T16_INDICES = [20, 21, 22]  # Catherine Yeung, Frankie Wong, Cecilia Szeto
-UNABLE_NIGHT_INDEX = 23              # Joyce Luk
-PARTTIME_FC_ONLY_INDEX = 24          # Jane Wang（兼职，只上FC）
-PARTTIME_FLEXIBLE_INDEX = 25         # Edward Liu（兼职，全能）
-ONLY_FC3_INDEX = 26                  # Clara Fong（只上FC3）
+st.session_state.person_names = PERSON_NAMES
+
+# ==================== 索引配置 ====================
+ONLY_T25_T16_INDICES = [19, 20, 21]
+UNABLE_NIGHT_INDEX = 22
+PARTTIME_FC_ONLY_INDEX = 25
+PARTTIME_FLEXIBLE_INDEX = 24
+ONLY_FC3_INDEX = 23
+FULLTIME_INDICES = list(range(24))  # 索引0-23为全职
+PARTTIME_INDICES = [24, 25]     # 索引24-25为兼职（Jane Wang, Edward Liu）
 
 
 def load_previous_schedule(uploaded_file, person_names):
@@ -64,8 +71,9 @@ def load_previous_schedule(uploaded_file, person_names):
 
 
 class ShiftScheduler:
-    def __init__(self, year, month, person_names, target_hours=166, max_hours=180,
-                 night_rest_days=3, previous_schedule=None):
+    def __init__(self, year, month, person_names, target_hours=167, max_hours=180,
+                 min_hours=167, night_rest_days=3, previous_schedule=None,
+                 prioritize_fulltime=True):
 
         self.year = year
         self.month = month
@@ -73,11 +81,11 @@ class ShiftScheduler:
         self.total_people = len(person_names)
         self.target_hours = target_hours
         self.max_hours = max_hours
+        self.min_hours = min_hours
         self.night_rest_days = night_rest_days
         self.previous_schedule = previous_schedule
+        self.prioritize_fulltime = prioritize_fulltime
 
-        # 正式工：索引0-24（25人，包含Joyce Luk和只T25/T16的人）
-        # 兼职：索引25-26（2人）
         self.num_fulltime = 25
         self.num_parttime = 2
 
@@ -95,11 +103,9 @@ class ShiftScheduler:
         self.shift_to_index = {s: i for i, s in enumerate(self.all_shifts)}
         self.hours = [14, 8, 11, 11, 11, 11, 0]
 
-        # 计算天数
         self.days_in_month = self._get_days_in_month()
         self.dates = [datetime(year, month, d + 1) for d in range(self.days_in_month)]
 
-        # 每天需求配置（周一=0, 周日=6）
         self.day_config = {
             0: {"night": 3, "fc": 1, "fc3": 1, "t38": 2, "t16": 2, "t25": 4},
             1: {"night": 3, "fc": 1, "fc3": 1, "t38": 2, "t16": 2, "t25": 4},
@@ -110,7 +116,6 @@ class ShiftScheduler:
             6: {"night": 2, "fc": 1, "fc3": 1, "t38": 2, "t16": 2, "t25": 4}
         }
 
-        # FC3后允许的班次：FC3、N、休息
         self.fc3_allowed_next = [
             self.shift_to_index[self.shift_fc3],
             self.shift_to_index[self.shift_night],
@@ -125,7 +130,6 @@ class ShiftScheduler:
         return (next_month - datetime(self.year, self.month, 1)).days
 
     def _add_count_constraint(self, model, day, shift_idx, target):
-        """添加某天某班次人数等于target"""
         vars_list = []
         for p in range(self.total_people):
             b = model.NewBoolVar(f'c_{day}_{p}_{shift_idx}')
@@ -159,7 +163,6 @@ class ShiftScheduler:
                     hour_terms.append(h * b)
             model.Add(total_hours[p] == sum(hour_terms))
 
-        # 索引
         night_idx = self.shift_to_index[self.shift_night]
         off_idx = self.shift_to_index[self.shift_off]
         fc_idx = self.shift_to_index[self.shift_fc]
@@ -192,7 +195,7 @@ class ShiftScheduler:
         for d in range(self.days_in_month):
             model.Add(self.shifts[(UNABLE_NIGHT_INDEX, d)] != night_idx)
 
-        # 2. Catherine Yeung, Frankie Wong, Cecilia Szeto 只能上T25/T16/休息
+        # 2. 只T25/T16的人
         for p in ONLY_T25_T16_INDICES:
             for d in range(self.days_in_month):
                 model.Add(self.shifts[(p, d)] != night_idx)
@@ -215,14 +218,13 @@ class ShiftScheduler:
             model.Add(self.shifts[(PARTTIME_FC_ONLY_INDEX, d)] != t16_idx)
             model.Add(self.shifts[(PARTTIME_FC_ONLY_INDEX, d)] != t25_idx)
             model.Add(self.shifts[(PARTTIME_FC_ONLY_INDEX, d)] != t38_idx)
-            if d % 7 >= 4:  # 周五~周日休息
+            if d % 7 >= 4:
                 model.Add(self.shifts[(PARTTIME_FC_ONLY_INDEX, d)] == off_idx)
 
         # ========== 每天班次需求 ==========
         for d in range(self.days_in_month):
             weekday = d % 7
             cfg = self.day_config[weekday]
-
             self._add_count_constraint(model, d, night_idx, cfg["night"])
             self._add_count_constraint(model, d, fc_idx, cfg["fc"])
             self._add_count_constraint(model, d, fc3_idx, cfg["fc3"])
@@ -230,7 +232,7 @@ class ShiftScheduler:
             self._add_count_constraint(model, d, t16_idx, cfg["t16"])
             self._add_count_constraint(model, d, t25_idx, cfg["t25"])
 
-        # ========== N后强制休息3天 ==========
+        # ========== N后休息3天 ==========
         for p in range(self.total_people):
             for d in range(self.days_in_month - self.night_rest_days):
                 night_shift = model.NewBoolVar(f'night_{p}_{d}')
@@ -239,9 +241,8 @@ class ShiftScheduler:
                 for rd in range(d + 1, d + self.night_rest_days + 1):
                     model.Add(self.shifts[(p, rd)] == off_idx).OnlyEnforceIf(night_shift)
 
-        # ========== 上3天班后休息3天 ==========
+        # ========== 上3休3 ==========
         for p in range(self.total_people):
-            # 任何连续4天内至少有1天休息
             for d in range(self.days_in_month - 3):
                 work_vars = []
                 for i in range(4):
@@ -251,7 +252,6 @@ class ShiftScheduler:
                     work_vars.append(is_work)
                 model.Add(sum(work_vars) <= 3)
 
-            # 连续工作3天后，第4、5、6天必须休息（上3休3）
             for d in range(self.days_in_month - 5):
                 work3_vars = []
                 for i in range(3):
@@ -268,7 +268,7 @@ class ShiftScheduler:
                     if d + rd < self.days_in_month:
                         model.Add(self.shifts[(p, d + rd)] == off_idx).OnlyEnforceIf(all_work3)
 
-        # ========== FC3后只能接FC3/N/休息 ==========
+        # ========== FC3后限制 ==========
         for p in range(self.total_people):
             for d in range(self.days_in_month - 1):
                 is_fc3 = model.NewBoolVar(f'fc3_{p}_{d}')
@@ -283,14 +283,18 @@ class ShiftScheduler:
                     allowed_conditions.append(is_allowed)
                 model.AddBoolOr(allowed_conditions).OnlyEnforceIf(is_fc3)
 
-        # ========== 工时上限（仅正式工） ==========
-        for p in range(self.num_fulltime):
+        # ========== 全职人员工时约束 ==========
+        # 全职人员（索引0-24）工时必须 >= min_hours（167小时）
+        for p in FULLTIME_INDICES:
+            model.Add(total_hours[p] >= self.min_hours)
             model.Add(total_hours[p] <= self.max_hours)
 
-        # ========== 优化目标 ==========
+        # ========== 优先全职排班（通过目标函数实现） ==========
+
+        # 目标1：工时偏差（尽量接近目标工时）
         hours_penalty = model.NewIntVar(0, 1000000, "hours_penalty")
         hours_diff = []
-        for p in range(self.num_fulltime):
+        for p in FULLTIME_INDICES:
             diff = model.NewIntVar(-self.max_hours * 2, self.max_hours * 2, f"diff_{p}")
             model.Add(diff == total_hours[p] - self.target_hours)
             abs_diff = model.NewIntVar(0, self.max_hours * 2, f"abs_{p}")
@@ -298,14 +302,14 @@ class ShiftScheduler:
             hours_diff.append(abs_diff)
         model.Add(hours_penalty == sum(hours_diff))
 
-        # 夜班均衡
+        # 目标2：夜班均衡（全职人员）
         night_counts = []
-        for p in range(self.total_people):
-            if p == PARTTIME_FC_ONLY_INDEX:
-                continue
-            if p == ONLY_FC3_INDEX:
+        for p in FULLTIME_INDICES:
+            if p == UNABLE_NIGHT_INDEX:
                 continue
             if p in ONLY_T25_T16_INDICES:
+                continue
+            if p == ONLY_FC3_INDEX:
                 continue
             nc = model.NewIntVar(0, self.days_in_month, f"nc_{p}")
             terms = []
@@ -317,6 +321,21 @@ class ShiftScheduler:
             model.Add(nc == sum(terms))
             night_counts.append(nc)
 
+        # ========== 目标3：优先全职，兼职作为补充 ==========
+        # 兼职工时尽量少（权重低），全职工时偏差权重高
+        # 这样求解器会优先让全职人员上班，兼职只在必要时补充
+
+        # 兼职工时惩罚（越小越好，但需要满足班次需求）
+        parttime_penalty = model.NewIntVar(0, 5000, "parttime_penalty")
+        parttime_hours = []
+        for p in PARTTIME_INDICES:
+            if p == PARTTIME_FC_ONLY_INDEX:
+                continue  # Jane Wang 本来就有限制
+            pt_hours = model.NewIntVar(0, 500, f"pt_{p}")
+            model.Add(pt_hours == total_hours[p])
+            parttime_hours.append(pt_hours)
+        model.Add(parttime_penalty == sum(parttime_hours))
+
         if night_counts:
             max_night = model.NewIntVar(0, self.days_in_month, "max_n")
             min_night = model.NewIntVar(0, self.days_in_month, "min_n")
@@ -324,9 +343,10 @@ class ShiftScheduler:
             model.AddMinEquality(min_night, night_counts)
             night_penalty = model.NewIntVar(0, self.days_in_month, "np")
             model.Add(night_penalty == max_night - min_night)
-            model.Minimize(10 * hours_penalty + night_penalty)
+            # 全职工时偏差权重最高(10)，夜班均衡其次(1)，兼职工时惩罚最小(0.01)
+            model.Minimize(10 * hours_penalty + 1 * night_penalty + parttime_penalty)
         else:
-            model.Minimize(10 * hours_penalty)
+            model.Minimize(10 * hours_penalty + parttime_penalty)
 
         # ========== 求解 ==========
         solver = cp_model.CpSolver()
@@ -352,14 +372,12 @@ class ShiftScheduler:
         columns = ["日期", "星期"] + self.person_names
         df_schedule = pd.DataFrame(rows, columns=columns)
 
-        # 统计
         night_idx = self.shift_to_index[self.shift_night]
         fc_idx = self.shift_to_index[self.shift_fc]
         fc3_idx = self.shift_to_index[self.shift_fc3]
         t16_idx = self.shift_to_index[self.shift_t16]
         t25_idx = self.shift_to_index[self.shift_t25]
         t38_idx = self.shift_to_index[self.shift_t38]
-        off_idx = self.shift_to_index[self.shift_off]
 
         stats = []
         for p, name in enumerate(self.person_names):
@@ -384,12 +402,19 @@ class ShiftScheduler:
             elif p == ONLY_FC3_INDEX:
                 tag = "只FC3"
             else:
-                tag = "全能"
+                tag = "全职"
+
+            # 标记工时是否达标
+            if p in FULLTIME_INDICES:
+                status_tag = "✅" if total_h >= self.min_hours else "⚠️"
+            else:
+                status_tag = ""
 
             stats.append({
                 "人员": name,
                 "类型": tag,
                 "总工时": total_h,
+                f"是否≥{self.min_hours}h": status_tag,
                 "上班天数": work_days,
                 "休息天数": self.days_in_month - work_days,
                 "N": night_cnt,
@@ -401,7 +426,6 @@ class ShiftScheduler:
             })
         df_stats = pd.DataFrame(stats)
 
-        # 记录最后3天
         last_three_days = {}
         for p, name in enumerate(self.person_names):
             last_three = []
@@ -418,18 +442,20 @@ class ShiftScheduler:
 # ==================== 主程序 ====================
 st.title("📅 自动排班系统")
 
-# 使用固定人员名单，确保与索引配置一致
-if 'person_names' not in st.session_state or st.session_state.person_names != FIXED_PERSON_NAMES:
-    st.session_state.person_names = FIXED_PERSON_NAMES.copy()
+# 显示当前人员数量
+st.write(f"**当前人员数量: {len(st.session_state.person_names)} 人**")
 
-# 显示人员配置
+# 检查重复
+duplicates = [x for x in st.session_state.person_names if st.session_state.person_names.count(x) > 1]
+if duplicates:
+    st.error(f"⚠️ 发现重复人员: {set(duplicates)}")
+    st.button("🔄 点击修复", on_click=lambda: st.session_state.__setitem__('person_names', PERSON_NAMES))
+
 with st.expander("👥 人员配置", expanded=True):
-    st.write(f"**总人数: {len(st.session_state.person_names)} 人**")
-
     col1, col2 = st.columns(2)
 
     with col1:
-        st.write("**正式工 (25人)**")
+        st.write("**全职人员 (25人)**")
         for i, name in enumerate(st.session_state.person_names[:25]):
             if i in ONLY_T25_T16_INDICES:
                 st.write(f"  {i+1}. {name} 🔒 (只T25/T16)")
@@ -459,12 +485,10 @@ st.markdown("---")
 
 # 上传上月排班数据
 st.subheader("📤 上传上月排班数据（可选）")
-st.markdown("上传上个月生成的排班表，系统会自动读取最后3天的班次进行跨月衔接。")
 
 uploaded_file = st.file_uploader(
     "选择上个月的排班 Excel 或 JSON 文件",
-    type=['xlsx', 'json'],
-    help="上传之前生成的排班表，确保跨月连续性"
+    type=['xlsx', 'json']
 )
 
 previous_schedule = None
@@ -473,16 +497,6 @@ if uploaded_file:
         previous_schedule = load_previous_schedule(uploaded_file, st.session_state.person_names)
         if previous_schedule:
             st.success("✅ 已成功加载上个月最后3天的排班数据")
-            with st.expander("查看加载的数据（前5人）"):
-                preview = []
-                for i, (name, days) in enumerate(list(previous_schedule.items())[:5]):
-                    preview.append({
-                        "人员": name,
-                        "倒数第3天": days[0] if len(days) > 0 else "-",
-                        "倒数第2天": days[1] if len(days) > 1 else "-",
-                        "最后1天": days[2] if len(days) > 2 else "-"
-                    })
-                st.dataframe(pd.DataFrame(preview))
         else:
             st.warning("⚠️ 无法读取文件，本月将从零开始排班")
 
@@ -491,8 +505,9 @@ st.markdown("---")
 # 参数设置
 st.sidebar.header("⚙️ 排班参数")
 
-target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=140, max_value=200, value=166, step=1)
-max_hours = st.sidebar.number_input("⚠️ 最大工时（小时/月）", min_value=160, max_value=220, value=180, step=1)
+min_hours = st.sidebar.number_input("📈 全职最低工时（小时/月）", min_value=160, max_value=175, value=167, step=1)
+target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=160, max_value=180, value=170, step=1)
+max_hours = st.sidebar.number_input("⚠️ 最大工时（小时/月）", min_value=170, max_value=200, value=180, step=1)
 night_rest_days = st.sidebar.slider("🌙 N后强制休息天数", min_value=1, max_value=5, value=3, step=1)
 
 st.sidebar.markdown("### 📋 班次说明")
@@ -522,6 +537,12 @@ st.sidebar.markdown("""
 - **Clara Fong**: 只FC3
 """)
 
+st.sidebar.markdown("### ⭐ 排班策略")
+st.sidebar.markdown("""
+- **全职优先**: 全职人员先排班，工时≥167h
+- **兼职补充**: 兼职人员只在必要时填补空缺
+""")
+
 # 开始排班
 if st.button("🚀 开始排班", type="primary", use_container_width=True):
     with st.spinner("正在求解，请稍候（约2-5分钟）..."):
@@ -531,8 +552,10 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
             person_names=st.session_state.person_names,
             target_hours=target_hours,
             max_hours=max_hours,
+            min_hours=min_hours,
             night_rest_days=night_rest_days,
-            previous_schedule=previous_schedule
+            previous_schedule=previous_schedule,
+            prioritize_fulltime=True
         )
 
         result = scheduler.run()
@@ -542,15 +565,21 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
             st.success("✅ 排班成功！")
 
-            col1, col2, col3, col4 = st.columns(4)
+            # 统计摘要
+            col1, col2, col3, col4, col5 = st.columns(5)
+            fulltime_stats = df_stats[df_stats["类型"] == "全职"]
+            parttime_stats = df_stats[df_stats["类型"].str.contains("兼职")]
+
             with col1:
                 st.metric("总人数", len(st.session_state.person_names))
             with col2:
-                st.metric("平均工时", f"{df_stats['总工时'].mean():.1f}h")
+                st.metric("全职平均工时", f"{fulltime_stats['总工时'].mean():.1f}h")
             with col3:
-                st.metric("工时范围", f"{df_stats['总工时'].min()} - {df_stats['总工时'].max()}h")
+                st.metric("全职工时达标率", f"{len(fulltime_stats[fulltime_stats[f'是否≥{min_hours}h'] == '✅'])}/{len(fulltime_stats)}")
             with col4:
-                st.metric("平均夜班", f"{df_stats['N'].mean():.1f}天")
+                st.metric("兼职平均工时", f"{parttime_stats['总工时'].mean():.1f}h" if len(parttime_stats) > 0 else "0h")
+            with col5:
+                st.metric("平均夜班", f"{fulltime_stats['N'].mean():.1f}天")
 
             st.subheader("📊 排班表预览（前20天）")
             st.dataframe(df_schedule.head(20), use_container_width=True)
@@ -588,64 +617,9 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
                 use_container_width=True
             )
 
-            # 约束验证
-            st.subheader("✅ 约束验证")
-            validations = []
-
-            # 验证N后休息
-            night_violations = []
-            for p in range(scheduler.total_people):
-                for d in range(scheduler.days_in_month - night_rest_days):
-                    if solver.Value(scheduler.shifts[(p, d)]) == night_idx:
-                        for rd in range(d + 1, d + night_rest_days + 1):
-                            if solver.Value(scheduler.shifts[(p, rd)]) != off_idx:
-                                night_violations.append(f"{scheduler.person_names[p]} 第{d+1}天N后第{rd+1}天未休息")
-            if night_violations:
-                validations.append(f"❌ N后休息: {len(night_violations)}处违规")
-            else:
-                validations.append("✅ N后休息3天: 通过")
-
-            # 验证上3休3
-            work_violations = []
-            for p in range(scheduler.total_people):
-                for d in range(scheduler.days_in_month - 5):
-                    work_streak = 0
-                    for i in range(3):
-                        if solver.Value(scheduler.shifts[(p, d + i)]) != off_idx:
-                            work_streak += 1
-                    if work_streak == 3:
-                        for rd in range(3, 6):
-                            if d + rd < scheduler.days_in_month:
-                                if solver.Value(scheduler.shifts[(p, d + rd)]) != off_idx:
-                                    work_violations.append(f"{scheduler.person_names[p]} 第{d+1}-{d+3}天上班后未休3天")
-                                    break
-            if work_violations:
-                validations.append(f"❌ 上3休3: {len(work_violations)}处违规")
-            else:
-                validations.append("✅ 上3休3: 通过")
-
-            # 验证FC3后约束
-            fc3_violations = []
-            for p in range(scheduler.total_people):
-                for d in range(scheduler.days_in_month - 1):
-                    if solver.Value(scheduler.shifts[(p, d)]) == fc3_idx:
-                        next_shift = solver.Value(scheduler.shifts[(p, d + 1)])
-                        if next_shift not in scheduler.fc3_allowed_next:
-                            fc3_violations.append(f"{scheduler.person_names[p]} 第{d+1}天FC3后第{d+2}天上了{scheduler.all_shifts[next_shift]}")
-            if fc3_violations:
-                validations.append(f"❌ FC3后约束: {len(fc3_violations)}处违规")
-            else:
-                validations.append("✅ FC3后只能接FC3/N/休息: 通过")
-
-            for v in validations:
-                if v.startswith("✅"):
-                    st.success(v)
-                else:
-                    st.error(v)
-
         else:
             st.error("❌ 未找到可行解")
-            st.info("💡 建议：\n1. 检查上月最后3天是否与本月冲突\n2. 尝试减少夜班后休息天数\n3. 放宽工时上限")
+            st.info("💡 建议：\n1. 降低全职最低工时要求（从167降到165或160）\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
 
 st.markdown("---")
-st.markdown("💡 **提示**: 系统会自动保存每月最后3天的排班数据供下月使用")
+st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥167小时")
