@@ -15,21 +15,50 @@ st.set_page_config(
 
 # ==================== 人员名单（固定） ====================
 FIXED_PERSON_NAMES = [
+    # 全能人员（20人）
     "Flora Feng", "Ivy Chen", "Yolanda Yu", "Vivian You", "Eddie Yang",
     "Yulia Tang", "Lusi Cai", "Peter Li", "Donnie Wu", "Sam Jiang",
     "England Chen", "Zac Yang", "Riky Ye", "Celine Li", "Hope He",
-    "Sama Liu", "Yuki Jiang", "Jessica Dong", "Riley Ren", "Catherine Yeung",
-    "Frankie Wong", "Cecilia Szeto", "Joyce Luk", "Jane Wang", "Edward Liu",
+    "Sama Liu", "Yuki Jiang", "Jessica Dong", "Erin Li", "Riley Ren",
+    # 只T25/T16（3人）
+    "Catherine Yeung", "Frankie Wong", "Cecilia Szeto",
+    # 不能上夜班（1人）
+    "Joyce Luk",
+    # 兼职 - 只上FC（1人）
+    "Jane Wang",
+    # 兼职 - 全能（1人）
+    "Edward Liu",
+    # 只上FC3（1人）
     "Clara Fong"
 ]
 
-# 特殊人员配置（索引从0开始）
-# Frankie Wong, Cecilia Szeto, Catherine Yeung = 只T25/T16 (索引21, 22, 23)
-ONLY_T25_T16_INDICES = [21, 22, 23]  # Frankie Wong, Cecilia Szeto, Catherine Yeung
-UNABLE_NIGHT_INDEX = 20  # Joyce Luk（索引20，第21人）
-PARTTIME_FC_ONLY_INDEX = 23  # Jane Wang（索引23，第24人）- 只上FC，周末休息
-PARTTIME_FLEXIBLE_INDEX = 24  # Edward Liu（索引24，第25人）- 全能
-ONLY_FC3_INDEX = 25  # Clara Fong（索引25，第26人）- 只上FC3
+# 特殊人员索引配置（基于上面的列表）
+# 总共27人：20全能 + 3只T25/T16 + 1禁夜班 + 1只FC + 1全能兼职 + 1只FC3
+TOTAL_PEOPLE = 27
+NUM_FULLTIME = 25  # 前25人为正式工（索引0-24）
+NUM_PARTTIME = 2   # 后2人为兼职（索引25-26）
+
+# 索引分配（从0开始）
+# 0-19: 全能正式工 (20人)
+# 20-22: 只T25/T16 (3人) - Catherine Yeung, Frankie Wong, Cecilia Szeto
+# 23: 不能上夜班 - Joyce Luk
+# 24: 正式工（已包含在25人内，可正常上班但不能上夜班的是Joyce Luk）
+# 但实际上Joyce Luk是第24个（索引23），所以正式工是0-23（24人）+ 兼职？
+
+# 重新整理：
+# 索引 0-19: 全能正式工（20人）
+# 索引 20-22: 只T25/T16（3人）- Catherine Yeung, Frankie Wong, Cecilia Szeto
+# 索引 23: Joyce Luk（禁夜班，属于正式工）
+# 索引 24: Jane Wang（兼职，只上FC）
+# 索引 25: Edward Liu（兼职，全能）
+# 索引 26: Clara Fong（只上FC3）
+
+ONLY_T25_T16_INDICES = [20, 21, 22]  # Catherine Yeung, Frankie Wong, Cecilia Szeto
+UNABLE_NIGHT_INDEX = 23              # Joyce Luk
+PARTTIME_FC_ONLY_INDEX = 24          # Jane Wang
+PARTTIME_FLEXIBLE_INDEX = 25         # Edward Liu
+ONLY_FC3_INDEX = 26                  # Clara Fong
+
 
 def load_previous_schedule(uploaded_file, person_names):
     """从上传的文件加载上个月排班数据"""
@@ -67,8 +96,8 @@ class ShiftScheduler:
         self.previous_schedule = previous_schedule
 
         # 正式工和兼职数量
-        self.num_fulltime = self.total_people - 2  # 25人正式工（排除2个兼职：Jane Wang, Edward Liu）
-        self.num_parttime = 2
+        self.num_fulltime = 25  # 前25人（索引0-24）
+        self.num_parttime = 2   # 后2人（索引25-26）
 
         # 班次定义
         self.shift_night = "N"
@@ -187,7 +216,7 @@ class ShiftScheduler:
         for d in range(self.days_in_month):
             model.Add(self.shifts[(UNABLE_NIGHT_INDEX, d)] != night_idx)
 
-        # 2. Frankie Wong, Cecilia Szeto, Catherine Yeung 只能上T25/T16/休息
+        # 2. Catherine Yeung, Frankie Wong, Cecilia Szeto 只能上T25/T16/休息
         for p in ONLY_T25_T16_INDICES:
             for d in range(self.days_in_month):
                 model.Add(self.shifts[(p, d)] != night_idx)
@@ -284,7 +313,7 @@ class ShiftScheduler:
                     allowed_conditions.append(is_allowed)
                 model.AddBoolOr(allowed_conditions).OnlyEnforceIf(is_fc3)
 
-        # ========== 工时上限 ==========
+        # ========== 工时上限（仅正式工，索引0-24） ==========
         for p in range(self.num_fulltime):
             model.Add(total_hours[p] <= self.max_hours)
 
@@ -304,6 +333,10 @@ class ShiftScheduler:
         for p in range(self.total_people):
             if p == PARTTIME_FC_ONLY_INDEX:
                 continue  # Jane Wang不上夜班
+            if p == ONLY_FC3_INDEX:
+                continue  # Clara Fong不上夜班
+            if p in ONLY_T25_T16_INDICES:
+                continue  # 只T25/T16的人不上夜班
             nc = model.NewIntVar(0, self.days_in_month, f"nc_{p}")
             terms = []
             for d in range(self.days_in_month):
@@ -370,8 +403,23 @@ class ShiftScheduler:
 
             total_h = sum(self.hours[solver.Value(self.shifts[(p, d)])] for d in range(self.days_in_month))
 
+            # 标记特殊人员
+            if p in ONLY_T25_T16_INDICES:
+                tag = "🔒只T25/T16"
+            elif p == UNABLE_NIGHT_INDEX:
+                tag = "🚫禁夜班"
+            elif p == PARTTIME_FC_ONLY_INDEX:
+                tag = "兼职-只FC"
+            elif p == PARTTIME_FLEXIBLE_INDEX:
+                tag = "兼职-全能"
+            elif p == ONLY_FC3_INDEX:
+                tag = "🔒只FC3"
+            else:
+                tag = "全能"
+
             stats.append({
                 "人员": name,
+                "类型": tag,
                 "总工时": total_h,
                 "上班天数": work_days,
                 "休息天数": self.days_in_month - work_days,
@@ -408,7 +456,10 @@ if 'person_names' not in st.session_state:
 # 显示人员配置
 with st.expander("👥 人员配置", expanded=True):
     st.write(f"**总人数: {len(st.session_state.person_names)} 人**")
+
+    # 按类型分组显示
     col1, col2 = st.columns(2)
+
     with col1:
         st.write("**正式工 (25人)**")
         for i, name in enumerate(st.session_state.person_names[:25]):
@@ -420,11 +471,12 @@ with st.expander("👥 人员配置", expanded=True):
                 st.write(f"  {i+1}. {name} 🔒 (只FC3)")
             else:
                 st.write(f"  {i+1}. {name}")
+
     with col2:
         st.write("**兼职 (2人)**")
-        st.write(f"  24. {st.session_state.person_names[23]} (Jane Wang, 只FC/周末休)")
-        st.write(f"  25. {st.session_state.person_names[24]} (Edward Liu, 全能)")
-        st.write(f"  26. {st.session_state.person_names[25]} (Clara Fong, 只FC3)")
+        st.write(f"  26. {st.session_state.person_names[24]} (Jane Wang, 只FC/周末休)")
+        st.write(f"  27. {st.session_state.person_names[25]} (Edward Liu, 全能)")
+        st.write(f"  28. {st.session_state.person_names[26]} (Clara Fong, 只FC3)")
 
 st.markdown("---")
 
@@ -495,7 +547,7 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown("### 🔒 特殊人员")
 st.sidebar.markdown("""
-- **Frankie Wong, Cecilia Szeto, Catherine Yeung**: 只T25/T16
+- **Catherine Yeung, Frankie Wong, Cecilia Szeto**: 只T25/T16
 - **Joyce Luk**: 禁夜班
 - **Jane Wang**: 只FC，周末休
 - **Edward Liu**: 全能兼职
@@ -574,12 +626,12 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
             # 验证N后休息
             night_violations = []
-            for p in range(self.total_people):
-                for d in range(self.days_in_month - night_rest_days):
+            for p in range(scheduler.total_people):
+                for d in range(scheduler.days_in_month - night_rest_days):
                     if solver.Value(scheduler.shifts[(p, d)]) == night_idx:
                         for rd in range(d + 1, d + night_rest_days + 1):
                             if solver.Value(scheduler.shifts[(p, rd)]) != off_idx:
-                                night_violations.append(f"{self.person_names[p]} 第{d+1}天N后第{rd+1}天未休息")
+                                night_violations.append(f"{scheduler.person_names[p]} 第{d+1}天N后第{rd+1}天未休息")
             if night_violations:
                 validations.append(f"❌ N后休息: {len(night_violations)}处违规")
             else:
@@ -587,17 +639,17 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
             # 验证上3休3
             work_violations = []
-            for p in range(self.total_people):
-                for d in range(self.days_in_month - 5):
+            for p in range(scheduler.total_people):
+                for d in range(scheduler.days_in_month - 5):
                     work_streak = 0
                     for i in range(3):
                         if solver.Value(scheduler.shifts[(p, d + i)]) != off_idx:
                             work_streak += 1
                     if work_streak == 3:
                         for rd in range(3, 6):
-                            if d + rd < self.days_in_month:
+                            if d + rd < scheduler.days_in_month:
                                 if solver.Value(scheduler.shifts[(p, d + rd)]) != off_idx:
-                                    work_violations.append(f"{self.person_names[p]} 第{d+1}-{d+3}天上班后未休3天")
+                                    work_violations.append(f"{scheduler.person_names[p]} 第{d+1}-{d+3}天上班后未休3天")
                                     break
             if work_violations:
                 validations.append(f"❌ 上3休3: {len(work_violations)}处违规")
@@ -606,12 +658,12 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
             # 验证FC3后约束
             fc3_violations = []
-            for p in range(self.total_people):
-                for d in range(self.days_in_month - 1):
+            for p in range(scheduler.total_people):
+                for d in range(scheduler.days_in_month - 1):
                     if solver.Value(scheduler.shifts[(p, d)]) == fc3_idx:
                         next_shift = solver.Value(scheduler.shifts[(p, d + 1)])
                         if next_shift not in scheduler.fc3_allowed_next:
-                            fc3_violations.append(f"{self.person_names[p]} 第{d+1}天FC3后第{d+2}天上了{scheduler.all_shifts[next_shift]}")
+                            fc3_violations.append(f"{scheduler.person_names[p]} 第{d+1}天FC3后第{d+2}天上了{scheduler.all_shifts[next_shift]}")
             if fc3_violations:
                 validations.append(f"❌ FC3后约束: {len(fc3_violations)}处违规")
             else:
@@ -622,7 +674,4 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
         else:
             st.error("❌ 未找到可行解")
-            st.info("💡 建议：\n1. 检查上月最后3天是否与本月冲突\n2. 尝试减少夜班后休息天数\n3. 放宽工时上限")
-
-st.markdown("---")
-st.markdown("💡 **提示**: 系统会自动保存每月最后3天的排班数据供下月使用")
+            st
