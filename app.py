@@ -73,7 +73,7 @@ def load_previous_schedule(uploaded_file, person_names):
 
 class ShiftScheduler:
     def __init__(self, year, month, person_names, target_hours=167, max_hours=180,
-                 min_hours=167, night_rest_days=3, previous_schedule=None):
+                 min_hours=155, night_rest_days=3, previous_schedule=None):
 
         self.year = year
         self.month = month
@@ -528,7 +528,7 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown("### ⭐ 排班策略")
 st.sidebar.markdown("""
-- **全职优先**: 全职人员先排班，工时≥167h
+- **全职优先**: 全职人员先排班，工时≥155h
 - **兼职补充**: 兼职人员只在必要时填补空缺
 """)
 
@@ -612,4 +612,4 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
             st.info("💡 建议：\n1. 降低全职最低工时要求（从155降到150）\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
 
 st.markdown("---")
-st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥167小时")
+st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥155小时")
