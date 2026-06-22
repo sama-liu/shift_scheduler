@@ -1,4 +1,4 @@
-# app.py - 自动排班系统（最新版）
+# app.py - 自动排班系统
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -19,33 +19,39 @@ for key in list(st.session_state.keys()):
 
 # ==================== 人员名单 ====================
 PERSON_NAMES = [
-    # 全能全职（19人）索引 0-18
+    # 全能全职（18人）索引 0-17
     "Flora Feng", "Ivy Chen", "Yolanda Yu", "Vivian You", "Eddie Yang",
     "Yulia Tang", "Lusi Cai", "Peter Li", "Donnie Wu", "Sam Jiang",
     "England Chen", "Zac Yang", "Riky Ye", "Celine Li", "Hope He",
-    "Sama Liu", "Yuki Jiang", "Jessica Dong", "Riley Ren",
-    # 只T25/T16（3人）索引 19-21
+    "Sama Liu", "Yuki Jiang", "Jessica Dong",
+    # 只T25/T16（3人）索引 18-20
     "Catherine Yeung", "Frankie Wong", "Cecilia Szeto",
-    # 只FC3（1人）索引 22
+    # 只FC3（1人）索引 21
     "Clara Fong",
-    # 兼职-只FC（1人）索引 23
+    # 兼职-只FC（1人）索引 22
     "Jane Wang",
-    # 兼职-全能（1人）索引 24
+    # 兼职-全能（1人）索引 23
     "Edward Liu"
 ]
 
 st.session_state.person_names = PERSON_NAMES
 
 # ==================== 索引配置 ====================
-FULLTIME_INDICES = list(range(23))
-PARTTIME_INDICES = [23, 24]
-ONLY_T25_T16_INDICES = [19, 20, 21]
-ONLY_FC3_INDEX = 22
-PARTTIME_FC_ONLY_INDEX = 23
-PARTTIME_FLEXIBLE_INDEX = 24
+# 全职人员索引：0-21（22人）
+FULLTIME_INDICES = list(range(22))
 
+# 兼职人员索引：22-23（2人）
+PARTTIME_INDICES = [22, 23]
+
+# 特殊人员索引
+ONLY_T25_T16_INDICES = [18, 19, 20]  # Catherine Yeung, Frankie Wong, Cecilia Szeto
+ONLY_FC3_INDEX = 21                   # Clara Fong
+PARTTIME_FC_ONLY_INDEX = 22           # Jane Wang
+PARTTIME_FLEXIBLE_INDEX = 23          # Edward Liu
+
+# 总人数
 TOTAL_PEOPLE = len(PERSON_NAMES)
-NUM_FULLTIME = 23
+NUM_FULLTIME = 22
 NUM_PARTTIME = 2
 
 
@@ -72,8 +78,8 @@ def load_previous_schedule(uploaded_file, person_names):
 
 
 class ShiftScheduler:
-    def __init__(self, year, month, person_names, target_hours=167, max_hours=180,
-                 min_hours=155, night_rest_days=3, previous_schedule=None):
+    def __init__(self, year, month, person_names, target_hours=160, max_hours=180,
+                 min_hours=150, night_rest_days=3, previous_schedule=None):
 
         self.year = year
         self.month = month
@@ -85,7 +91,7 @@ class ShiftScheduler:
         self.night_rest_days = night_rest_days
         self.previous_schedule = previous_schedule
 
-        self.num_fulltime = 23
+        self.num_fulltime = 22
         self.num_parttime = 2
 
         # 班次定义
@@ -435,6 +441,7 @@ class ShiftScheduler:
 st.title("📅 自动排班系统")
 
 st.write(f"**总人数: {len(st.session_state.person_names)} 人（全职 {NUM_FULLTIME}人 + 兼职 {NUM_PARTTIME}人）**")
+st.info(f"📌 全职最低工时要求: {150} 小时/月")
 
 # 检查重复
 duplicates = [x for x in st.session_state.person_names if st.session_state.person_names.count(x) > 1]
@@ -448,8 +455,8 @@ with st.expander("👥 人员配置", expanded=True):
     col1, col2 = st.columns(2)
 
     with col1:
-        st.write("**全职人员 (23人)**")
-        for i, name in enumerate(st.session_state.person_names[:23]):
+        st.write("**全职人员 (22人)**")
+        for i, name in enumerate(st.session_state.person_names[:22]):
             if i in ONLY_T25_T16_INDICES:
                 st.write(f"  {i+1}. {name} 🔒 (只T25/T16)")
             elif i == ONLY_FC3_INDEX:
@@ -459,8 +466,8 @@ with st.expander("👥 人员配置", expanded=True):
 
     with col2:
         st.write("**兼职 (2人)**")
-        st.write(f"  24. {st.session_state.person_names[23]} (Jane Wang, 只FC/周末休)")
-        st.write(f"  25. {st.session_state.person_names[24]} (Edward Liu, 全能)")
+        st.write(f"  23. {st.session_state.person_names[22]} (Jane Wang, 只FC/周末休)")
+        st.write(f"  24. {st.session_state.person_names[23]} (Edward Liu, 全能)")
 
 st.markdown("---")
 
@@ -495,9 +502,9 @@ st.markdown("---")
 # 参数设置
 st.sidebar.header("⚙️ 排班参数")
 
-min_hours = st.sidebar.number_input("📈 全职最低工时（小时/月）", min_value=155, max_value=175, value=167, step=1)
-target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=155, max_value=180, value=170, step=1)
-max_hours = st.sidebar.number_input("⚠️ 最大工时（小时/月）", min_value=170, max_value=200, value=180, step=1)
+min_hours = st.sidebar.number_input("📈 全职最低工时（小时/月）", min_value=140, max_value=175, value=150, step=1)
+target_hours = st.sidebar.number_input("🎯 目标工时（小时/月）", min_value=150, max_value=180, value=160, step=1)
+max_hours = st.sidebar.number_input("⚠️ 最大工时（小时/月）", min_value=160, max_value=200, value=180, step=1)
 night_rest_days = st.sidebar.slider("🌙 N后强制休息天数", min_value=1, max_value=5, value=3, step=1)
 
 st.sidebar.markdown("### 📋 班次说明")
@@ -528,7 +535,7 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown("### ⭐ 排班策略")
 st.sidebar.markdown("""
-- **全职优先**: 全职人员先排班，工时≥155h
+- **全职优先**: 全职人员先排班，工时≥150h
 - **兼职补充**: 兼职人员只在必要时填补空缺
 """)
 
@@ -609,7 +616,7 @@ if st.button("🚀 开始排班", type="primary", use_container_width=True):
 
         else:
             st.error("❌ 未找到可行解")
-            st.info("💡 建议：\n1. 降低全职最低工时要求（从155降到150）\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
+            st.info("💡 建议：\n1. 降低全职最低工时要求\n2. 检查上月最后3天是否与本月冲突\n3. 减少夜班后休息天数\n4. 放宽工时上限")
 
 st.markdown("---")
-st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥155小时")
+st.markdown("💡 **提示**: 系统会优先给全职人员排班，确保全职人员工时≥150小时")
